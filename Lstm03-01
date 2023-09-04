@@ -1,0 +1,68 @@
+# 导入torch和nn模块，这两个模块都是PyTorch库中常用的模块
+import torch
+import torch.nn as nn
+import pandas as pd
+
+
+# 定义一个名为LSTMModel的类，这个类继承自nn.Module类，nn.Module是所有神经网络模块的基类
+class LSTMModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, batch_size, output_dim=1):
+        # 调用父类的初始化方法
+        super(LSTMModel, self).__init__()
+        # 定义隐藏层维度
+        self.hidden_dim = hidden_dim
+        # 定义LSTM层，输入维度为input_dim，隐藏层维度为hidden_dim，批量大小为batch_size，并且设置batch_first=True，这样输入张量的维度顺序可以符合(batch_size, seq_length, feature)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_size, batch_first=True)
+        # 定义全连接层，输入维度为hidden_dim，输出维度为output_dim
+        self.linear = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        # 定义初始隐藏状态和记忆细胞状态，大小分别为(1, x.size(0), hidden_dim)并设置设备为x所在的设备
+        h0 = torch.zeros(1, x.size(0), self.hidden_dim).to(x.device)
+        c0 = torch.zeros(1, x.size(0), self.hidden_dim).to(x.device)
+        # 前向通过LSTM层，输入张量为x，初始隐藏状态和记忆细胞状态分别为h0和c0
+        out, _ = self.lstm(x, (h0, c0))
+        # 取LSTM输出的最后一个时间步的输出作为全连接层的输入
+        out = self.linear(out[:, -1, :])
+        # 返回全连接层的输出结果
+        return out
+
+
+
+
+# 初始化模型，输入维度为input_dim，隐藏层维度为hidden_dim，批量大小为batch_size，输出维度默认为1
+input_dim = 1000
+hidden_dim = 35
+batch_size = 1
+output_dim = 1
+model = LSTMModel(input_dim, hidden_dim, batch_size, output_dim)
+
+# 定义损失函数为均方误差损失，优化器为Adam优化器，学习率为0.001
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+
+X_D = pd.read_csv('D:/c2303 type_volume_df.csv')
+numpy_array = X_D.values
+X_N = torch.from_numpy(numpy_array)
+X = torch.reshape(X_N, [10, 35, 1000])
+
+
+# 训练模型，循环5000次，每次都将X作为输入数据通过模型得到输出结果，然后计算输出结果与目标值的均方误差损失，最后反向传播并更新模型参数
+num_epochs = 5000
+for epoch in range(num_epochs):
+    # 前向传播
+    outputs = model(X)
+    loss = criterion(outputs, torch.ones_like(outputs))
+    # 反向传播和优化
+    optimizer.zero_grad()  # 清空之前未消费的梯度缓存
+    loss.backward()  # 反向传播，计算当前梯度并存储在每个参数的grad属性中
+    optimizer.step()  # 用计算出的梯度更新每个参数的值
+
+    if (epoch + 1) % 500 == 0:  # 每500次打印一次损失值
+        print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch + 1, num_epochs, loss.item()))
+
+
+# 使用模型对输入数据X进行预测，
+predicted = model(X)
+print("预测结果:", predicted)
